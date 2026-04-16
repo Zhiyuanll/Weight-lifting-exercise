@@ -1,0 +1,1 @@
+This project analyzed data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The goal of the analysis is to predict the manner in which the participants did the exercise. Manner of exercise execution is represented by variable “classe”. Prediction was performed by machine learning algorithms. 
