@@ -1,0 +1,165 @@
+---
+title: "Weight Lifting Exercise Data Analysis"
+output: html_document
+date: "2026-04-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This project analyzed data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The goal of the analysis is to predict the manner in which the participants did the exercise. Manner of exercise execution is represented by variable "classe". Prediction was performed by machine learning algorithms. Datasets and documentation are available from website here: 
+http://groupware.les.inf.puc-rio.br/har
+
+## Method
+
+#### Dataset and library
+
+*Training and testing data online were saved as .csv files before uploading to R*
+
+```{r data, include=FALSE}
+pmltrain <- read.csv("C:/Users/zzhang10/Desktop/To do/practical ML/data/raw/pml-training.csv", header=TRUE)
+pmltest <- read.csv("C:/Users/zzhang10/Desktop/To do/practical ML/data/raw/pml-testing.csv", header=TRUE)
+dim(pmltest)
+```
+
+
+```{r library, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+library(dplyr)
+#load related libraries
+library(AppliedPredictiveModeling)
+library(ggplot2)
+library(lattice)
+library(caret)
+library(Hmisc)
+library(tibble)
+library(bitops)
+library(rattle)
+library(rpart)
+library(ElemStatLearn)
+library(pgmm)
+library(randomForest)
+library(gbm3)
+library(lubridate)
+library(forecast)
+library(e1071)
+library(Matrix)
+library(glmnet)
+
+```
+
+<br>
+#### Data exploration and Pre-processing
+
+*# Handle missing values *
+
+```{r missing, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+#Explore data
+str(pmltrain)
+dim(pmltrain)
+
+#Remove missing >= 80%
+
+missrate_train <- colMeans(is.na(pmltrain))
+missrate_test <- colMeans(is.na(pmltest))
+
+train_clean <- pmltrain[, missrate_train <= 0.8]
+test_clean <- pmltest[, missrate_test <= 0.8]
+
+```
+
+<br>
+*# More pre-processing*
+
+```{r dummy, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+train_clean$user_name <- as.factor(train_clean$user_name)
+test_clean$user_name <- as.factor(test_clean$user_name)
+
+train_clean$cvtd_timestamp <- NULL
+test_clean$cvtd_timestamp <- NULL
+
+```
+<br>
+####Remove near-zero variance predictors
+```{r}
+nzv <- nearZeroVar(train_clean)
+
+train_clean <- train_clean[, -nzv]
+test_clean  <- test_clean[, -nzv]
+
+```
+<br>
+*#Make sure columns match exactly*
+```{r}
+
+#align using intersection; remove outcome correctly
+common_cols <- setdiff(intersect(names(train_clean), names(test_clean)), "classe")
+
+train_clean <- train_clean[, c(common_cols, "classe")]
+test_clean  <- test_clean[, common_cols]
+
+setdiff(names(train_clean), names(test_clean))
+
+#remove ID variables
+names(train_clean)
+
+id_vars <- c(
+  "X",
+  "user_name",
+  "raw_timestamp_part_1",
+  "raw_timestamp_part_2",
+  "cvtd_timestamp",
+  "new_window",
+  "num_window"
+)
+
+train_clean <- train_clean[, !(names(train_clean) %in% id_vars)]
+test_clean  <- test_clean[, !(names(test_clean) %in% id_vars)]
+```
+
+<br>
+*# Exploring distribution of continuous variables; Examine outliers*
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE, fig.width=10, fig.height=8}
+summary(train_clean)
+
+library(reshape2)
+library(ggplot2)
+
+num_vars <- train_clean[, sapply(train_clean, is.numeric)]
+melted <- melt(num_vars)
+
+ggplot(melted, aes(x = value)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~ variable, scales = "free")
+```
+
+<br>
+##### With training data, predict 'classe' with all the other variables using "ranger" method
+```{r model}
+library(ranger)
+
+train_clean$classe <- as.factor(train_clean$classe)
+
+set.seed(62433)
+modFit <- train(classe ~ ., data=train_clean, method="ranger", 
+                 trControl = trainControl(method="cv", number=3, verboseIter=TRUE)
+                )
+modFit
+
+pred <- predict(modFit, test_clean)
+pred
+```
+<br>
+#### Model buildup and result interpretation
+*A Random Forest model (via the ranger package) was trained using 3-fold cross-validation. Multiple tuning parameters (mtry and splitrule) were evaluated. The optimal model used mtry = 20 and the extratrees splitting rule, achieving near-perfect cross-validation accuracy (~100%) and Kappa (~1.0), indicating excellent predictive performance.*
+
+<br>
+##### Model assessment (out of sample error)
+*3-fold cross-validation was used to tune the Random Forest model. Expected out-of-sample accuracy ranges from 0.989 to 0.990. Therefore, the out-of-sample error is expected to be from 0.010 to 0.011. If more stable estimate is desired, 5-fold or 10-fold cross-validation can be used. *
+
+
+
+
